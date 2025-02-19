@@ -7,16 +7,16 @@ const router = express.Router();
 
 // User Registration
 router.post("/register", async (req, res) => {
-    const { name, age, profession, contact, address, gender, disease, medicalCertificate, password } = req.body;
+    const { name, age, profession, contact, street, city, state, zipCode, gender, disease, medicalCertificate, password } = req.body;
 
     try {
         const conn = await getDBConnection();
         const hashedPassword = await bcrypt.hash(password, 10);
         
         await conn.execute(
-            `INSERT INTO users (name, age, profession, contact, address, gender, disease, medical_certificate, password) 
-             VALUES (:name, :age, :profession, :contact, :address, :gender, :disease, :medicalCertificate, :password)`,
-            { name, age, profession, contact, address, gender, disease, medicalCertificate, password: hashedPassword },
+            `INSERT INTO users (name, age, profession, contact, street, city, state, zip_code, gender, disease, medical_certificate, password) 
+             VALUES (:name, :age, :profession, :contact, :street, :city, :state, :zipCode, :gender, :disease, :medicalCertificate, :password)`,
+            { name, age, profession, contact, street, city, state, zipCode, gender, disease, medicalCertificate, password: hashedPassword },
             { autoCommit: true }
         );
 
@@ -32,16 +32,18 @@ router.post("/login", async (req, res) => {
 
     try {
         const conn = await getDBConnection();
-        const result = await conn.execute(`SELECT * FROM users WHERE contact = :contact`, { contact });
+        const result = await conn.execute(
+            `SELECT id, name, age, profession, contact, street, city, state, zip_code, password FROM users WHERE contact = :contact`,
+            { contact },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
 
         if (result.rows.length === 0) {
             return res.status(400).json({ error: "User not found" });
         }
 
         const user = result.rows[0];
-        const storedHashedPassword = user[9]; 
 
-        // Compare hashed password
         const passwordMatch = await bcrypt.compare(password, storedHashedPassword);
 
         if (!passwordMatch) {
@@ -49,13 +51,16 @@ router.post("/login", async (req, res) => {
         }
 
         // Generate JWT token
-        const token = jwt.sign({ id: user[0], contact: user[3] }, process.env.JWT_SECRET, { expiresIn: "1h" });
+        const token = jwt.sign(
+            { id: user.ID, contact: user.CONTACT },
+            process.env.JWT_SECRET,
+            { expiresIn: "1h" }
+        );
 
         res.json({ message: "Login successful!", token });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-
 
 module.exports = router;
